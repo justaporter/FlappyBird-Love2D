@@ -5,9 +5,10 @@ local BASE_H = 512
 local GRAVITY_BASE = 1000
 local FLAP_VEL_BASE = -320
 local MAX_FALL_BASE = 400
-local PIPE_SPEED_BASE = 138
+local PIPE_SPEED_BASE = 170
 local FLAP_FRAME_TIME = 0.12
 local FLAP_ROT_HOLD_T = 0.12
+local FLAP_SNAP_ROT = -30
 
 local MENU_BOUNCE_PERIOD = 0.9
 local MENU_BOUNCE_AMP_BASE = 5
@@ -33,14 +34,14 @@ local GRAVITY, FLAP_VEL, MAX_FALL, PIPE_SPEED
 local GROUND_Y
 local BIRD_X
 
-local GAP_HEIGHT_FRAC = 0.21
+local GAP_HEIGHT_FRAC = 0.185
 local GAP_HEIGHT
 
-local PIPE_SPACING_SCALE = 0.89
-local SPAWN_INTERVAL_MIN = 1.2 * PIPE_SPACING_SCALE
-local SPAWN_INTERVAL_MAX = 1.9 * PIPE_SPACING_SCALE
-local MAX_GAP_SHIFT_FRAC = 0.46
-local SURPRISE_SHIFT_CHANCE = 0.35
+local PIPE_SPACING_SCALE = 0.72
+local SPAWN_INTERVAL_MIN = 1.3 * PIPE_SPACING_SCALE
+local SPAWN_INTERVAL_MAX = 1.3 * PIPE_SPACING_SCALE
+local MAX_GAP_SHIFT_FRAC = 0.34
+local SURPRISE_SHIFT_CHANCE = 0.18
 local EDGE_MARGIN_FRAC = 0.055
 local MAX_GAP_SHIFT, EDGE_MARGIN
 
@@ -152,8 +153,6 @@ local PANEL_NEW_BADGE_GAP_FRAC = 0.01
 local gameover_t = 0
 local go_tally_duration = GO_TALLY_MIN_T
 local go_tally_start_t = 0
-local go_best_start_t = 0
-local go_best_tally_duration = GO_TALLY_MIN_T
 local displayed_score = 0
 local displayed_best = 0
 
@@ -442,9 +441,8 @@ function love.update(dt)
         local vel_frac = bird.vel / SCALE
         if bird.rot_hold_t > 0 then
             bird.rot_hold_t = bird.rot_hold_t - dt
-            bird.rot = math.max(-25, math.min(bird.rot, vel_frac * 0.15))
         elseif vel_frac < 0 then
-            bird.rot = math.max(-25, vel_frac * 0.15)
+            bird.rot = math.max(FLAP_SNAP_ROT, vel_frac * 0.15)
         else
             bird.rot = math.min(90, vel_frac * 0.4)
         end
@@ -484,9 +482,7 @@ function love.update(dt)
             end
 
             go_tally_duration = math.max(GO_TALLY_MIN_T, math.min(GO_TALLY_MAX_T, score / GO_TALLY_RATE))
-            go_best_tally_duration = math.max(GO_TALLY_MIN_T, math.min(GO_TALLY_MAX_T, (best - prev_best) / GO_TALLY_RATE))
             go_tally_start_t = GO_BANNER_APPEAR_DELAY_T + GO_BANNER_SLIDE_T + GO_PANEL_DELAY_T + GO_PANEL_SLIDE_T + GO_TALLY_DELAY_T
-            go_best_start_t = go_tally_start_t
             playSound("hit")
             if hit_pipe then
                 playSound("die")
@@ -534,13 +530,12 @@ function updateGameoverSequence(dt)
         displayed_score = math.floor(t * score)
     end
 
-    if gameover_t <= go_best_start_t then
+    if displayed_score <= prev_best then
         displayed_best = prev_best
-    elseif gameover_t >= go_best_start_t + go_best_tally_duration then
+    elseif displayed_score >= best then
         displayed_best = best
     else
-        local t = (gameover_t - go_best_start_t) / go_best_tally_duration
-        displayed_best = math.floor(prev_best + t * (best - prev_best))
+        displayed_best = displayed_score
     end
 end
 
@@ -553,10 +548,12 @@ function flap()
     elseif state == "ready" then
         state = "play"
         bird.vel = FLAP_VEL
+        bird.rot = FLAP_SNAP_ROT
         bird.rot_hold_t = FLAP_ROT_HOLD_T
         playSound("wing")
     elseif state == "play" then
         bird.vel = FLAP_VEL
+        bird.rot = FLAP_SNAP_ROT
         bird.rot_hold_t = FLAP_ROT_HOLD_T
         playSound("wing")
     elseif state == "gameover" then
@@ -715,7 +712,7 @@ function drawGameoverSequence()
 
     love.graphics.setColor(1, 1, 1, 1)
 
-    local tally_finish_t = go_tally_start_t + math.max(go_tally_duration, go_best_tally_duration)
+    local tally_finish_t = go_tally_start_t + go_tally_duration
     if gameover_t < tally_finish_t then return end
 
     if is_new_best then
